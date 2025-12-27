@@ -17,22 +17,23 @@
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@48,400,0,0&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,1,0" />
         <script type="text/javascript">
             $(function() {
-                // When clicking on a province on the map, show its name
+                var cityUrlTemplate = $('#IranMap').data('cityUrlTemplate');
+
+                // When clicking on a province on the map, go to the city page
                 $('#IranMap .map .province path').click(function() {
                     var province = $(this).attr('class');
-                    var provinceName = $('#IranMap .list>ul>li>ul>li.' + province + ' a').html();
-                    if (provinceName) {
-                        $('#IranMap .city').html('نمایش شهرهای استان ' + provinceName);
+                    if (province && cityUrlTemplate) {
+                        window.location.href = cityUrlTemplate.replace('slug-placeholder', province);
                     }
                 });
 
-                // When clicking on a province name in the list, show its name
+                // When clicking on a province name in the list, go to the city page
                 $('#IranMap .list li.province>ul>li>a').click(function(e) {
-                    var provinceName = $(this).html();
-                    if (provinceName) {
-                        $('#IranMap .city').html('نمایش شهرهای استان ' + provinceName);
-                    }
                     e.preventDefault();
+                    var province = $(this).closest('li').attr('class');
+                    if (province && cityUrlTemplate) {
+                        window.location.href = cityUrlTemplate.replace('slug-placeholder', province);
+                    }
                 });
 
                 // ---- رنگ‌آمیزی استان‌ها روی نقشه بر اساس میانگین امتیاز ----
@@ -55,7 +56,7 @@
     </head>
     <body>
         
-        <div id="IranMap" class="clear">
+        <div id="IranMap" class="clear" data-city-url-template="{% url 'Authenticate:city_detail' 'slug-placeholder' %}">
 
             <div class="map">
                 <span class="show-title"></span>
@@ -129,7 +130,7 @@
                     <li class="province"><span>استانها</span>
                         <ul>
                             <li class="azerbaijan-east">
-                                <a href="{{ city_data.azerbaijan_east.admin_url }}">
+                                <a href="{{ city_data.azerbaijan_east.detail_url }}">
                                     {% if city_data.azerbaijan_east %}
                                         {{ city_data.azerbaijan_east.name }} ({{ city_data.azerbaijan_east.avg }})
                                     {% else %}
@@ -138,7 +139,7 @@
                                 </a>
                             </li>
                             <li class="azerbaijan-west">
-                                <a href="{{ city_data.azerbaijan_west.admin_url }}">
+                                <a href="{{ city_data.azerbaijan_west.detail_url }}">
                                     {% if city_data.azerbaijan_west %}
                                         {{ city_data.azerbaijan_west.name }} ({{ city_data.azerbaijan_west.avg }})
                                     {% else %}
@@ -147,7 +148,7 @@
                                 </a>
                             </li>
                             <li class="ardabil">
-                                <a href="{{ city_data.ardabil.admin_url }}">
+                                <a href="{{ city_data.ardabil.detail_url }}">
                                     {% if city_data.ardabil %}
                                         {{ city_data.ardabil.name }} ({{ city_data.ardabil.avg }})
                                     {% else %}
@@ -156,7 +157,7 @@
                                 </a>
                             </li>
                             <li class="isfahan">
-                                <a href="{{ city_data.isfahan.admin_url }}">
+                                <a href="{{ city_data.isfahan.detail_url }}">
                                     {% if city_data.isfahan %}
                                         {{ city_data.isfahan.name }} ({{ city_data.isfahan.avg }})
                                     {% else %}
@@ -165,7 +166,7 @@
                                 </a>
                             </li>
                             <li class="alborz">
-                                <a href="{{ city_data.alborz.admin_url }}">
+                                <a href="{{ city_data.alborz.detail_url }}">
                                     {% if city_data.alborz %}
                                         {{ city_data.alborz.name }} ({{ city_data.alborz.avg }})
                                     {% else %}
@@ -174,7 +175,7 @@
                                 </a>
                             </li>
                             <li class="ilam">
-                                <a href="{{ city_data.ilam.admin_url }}">
+                                <a href="{{ city_data.ilam.detail_url }}">
                                     {% if city_data.ilam %}
                                         {{ city_data.ilam.name }} ({{ city_data.ilam.avg }})
                                     {% else %}
@@ -183,7 +184,7 @@
                                 </a>
                             </li>
                             <li class="bushehr">
-                                <a href="{{ city_data.bushehr.admin_url }}">
+                                <a href="{{ city_data.bushehr.detail_url }}">
                                     {% if city_data.bushehr %}
                                         {{ city_data.bushehr.name }} ({{ city_data.bushehr.avg }})
                                     {% else %}
@@ -192,7 +193,7 @@
                                 </a>
                             </li>
                             <li class="tehran">
-                                <a href="{{ city_data.tehran.admin_url }}">
+                                <a href="{{ city_data.tehran.detail_url }}">
                                     {% if city_data.tehran %}
                                         {{ city_data.tehran.name }} ({{ city_data.tehran.avg }})
                                     {% else %}
@@ -201,7 +202,7 @@
                                 </a>
                             </li>
                             <li class="chahar-mahaal-bakhtiari">
-                                <a href="{{ city_data.chahar_mahaal_bakhtiari.admin_url }}">
+                                <a href="{{ city_data.chahar_mahaal_bakhtiari.detail_url }}">
                                     {% if city_data.chahar_mahaal_bakhtiari %}
                                         {{ city_data.chahar_mahaal_bakhtiari.name }} ({{ city_data.chahar_mahaal_bakhtiari.avg }})
                                     {% else %}
@@ -210,7 +211,7 @@
                                 </a>
                             </li>
                             <li class="khorasan-south">
-                                <a href="{{ city_data.khorasan_south.admin_url }}">
+                                <a href="{{ city_data.khorasan_south.detail_url }}">
                                     {% if city_data.khorasan_south %}
                                         {{ city_data.khorasan_south.name }} ({{ city_data.khorasan_south.avg }})
                                     {% else %}
@@ -219,7 +220,7 @@
                                 </a>
                             </li>
                             <li class="khorasan-razavi">
-                                <a href="{{ city_data.khorasan_razavi.admin_url }}">
+                                <a href="{{ city_data.khorasan_razavi.detail_url }}">
                                     {% if city_data.khorasan_razavi %}
                                         {{ city_data.khorasan_razavi.name }} ({{ city_data.khorasan_razavi.avg }})
                                     {% else %}
@@ -228,7 +229,7 @@
                                 </a>
                             </li>
                             <li class="khorasan-north">
-                                <a href="{{ city_data.khorasan_north.admin_url }}">
+                                <a href="{{ city_data.khorasan_north.detail_url }}">
                                     {% if city_data.khorasan_north %}
                                         {{ city_data.khorasan_north.name }} ({{ city_data.khorasan_north.avg }})
                                     {% else %}
@@ -237,7 +238,7 @@
                                 </a>
                             </li>
                             <li class="khuzestan">
-                                <a href="{{ city_data.khuzestan.admin_url }}">
+                                <a href="{{ city_data.khuzestan.detail_url }}">
                                     {% if city_data.khuzestan %}
                                         {{ city_data.khuzestan.name }} ({{ city_data.khuzestan.avg }})
                                     {% else %}
@@ -246,7 +247,7 @@
                                 </a>
                             </li>
                             <li class="zanjan">
-                                <a href="{{ city_data.zanjan.admin_url }}">
+                                <a href="{{ city_data.zanjan.detail_url }}">
                                     {% if city_data.zanjan %}
                                         {{ city_data.zanjan.name }} ({{ city_data.zanjan.avg }})
                                     {% else %}
@@ -255,7 +256,7 @@
                                 </a>
                             </li>
                             <li class="semnan">
-                                <a href="{{ city_data.semnan.admin_url }}">
+                                <a href="{{ city_data.semnan.detail_url }}">
                                     {% if city_data.semnan %}
                                         {{ city_data.semnan.name }} ({{ city_data.semnan.avg }})
                                     {% else %}
@@ -264,7 +265,7 @@
                                 </a>
                             </li>
                             <li class="sistan-baluchestan">
-                                <a href="{{ city_data.sistan_baluchestan.admin_url }}">
+                                <a href="{{ city_data.sistan_baluchestan.detail_url }}">
                                     {% if city_data.sistan_baluchestan %}
                                         {{ city_data.sistan_baluchestan.name }} ({{ city_data.sistan_baluchestan.avg }})
                                     {% else %}
@@ -273,7 +274,7 @@
                                 </a>
                             </li>
                             <li class="fars">
-                                <a href="{{ city_data.fars.admin_url }}">
+                                <a href="{{ city_data.fars.detail_url }}">
                                     {% if city_data.fars %}
                                         {{ city_data.fars.name }} ({{ city_data.fars.avg }})
                                     {% else %}
@@ -282,7 +283,7 @@
                                 </a>
                             </li>
                             <li class="qazvin">
-                                <a href="{{ city_data.qazvin.admin_url }}">
+                                <a href="{{ city_data.qazvin.detail_url }}">
                                     {% if city_data.qazvin %}
                                         {{ city_data.qazvin.name }} ({{ city_data.qazvin.avg }})
                                     {% else %}
@@ -291,7 +292,7 @@
                                 </a>
                             </li>
                             <li class="qom">
-                                <a href="{{ city_data.qom.admin_url }}">
+                                <a href="{{ city_data.qom.detail_url }}">
                                     {% if city_data.qom %}
                                         {{ city_data.qom.name }} ({{ city_data.qom.avg }})
                                     {% else %}
@@ -300,7 +301,7 @@
                                 </a>
                             </li>
                             <li class="kurdistan">
-                                <a href="{{ city_data.kurdistan.admin_url }}">
+                                <a href="{{ city_data.kurdistan.detail_url }}">
                                     {% if city_data.kurdistan %}
                                         {{ city_data.kurdistan.name }} ({{ city_data.kurdistan.avg }})
                                     {% else %}
@@ -309,7 +310,7 @@
                                 </a>
                             </li>
                             <li class="kerman">
-                                <a href="{{ city_data.kerman.admin_url }}">
+                                <a href="{{ city_data.kerman.detail_url }}">
                                     {% if city_data.kerman %}
                                         {{ city_data.kerman.name }} ({{ city_data.kerman.avg }})
                                     {% else %}
@@ -318,7 +319,7 @@
                                 </a>
                             </li>
                             <li class="kermanshah">
-                                <a href="{{ city_data.kermanshah.admin_url }}">
+                                <a href="{{ city_data.kermanshah.detail_url }}">
                                     {% if city_data.kermanshah %}
                                         {{ city_data.kermanshah.name }} ({{ city_data.kermanshah.avg }})
                                     {% else %}
@@ -327,7 +328,7 @@
                                 </a>
                             </li>
                             <li class="kohgiluyeh-boyer-ahmad">
-                                <a href="{{ city_data.kohgiluyeh_boyer_ahmad.admin_url }}">
+                                <a href="{{ city_data.kohgiluyeh_boyer_ahmad.detail_url }}">
                                     {% if city_data.kohgiluyeh_boyer_ahmad %}
                                         {{ city_data.kohgiluyeh_boyer_ahmad.name }} ({{ city_data.kohgiluyeh_boyer_ahmad.avg }})
                                     {% else %}
@@ -336,7 +337,7 @@
                                 </a>
                             </li>
                             <li class="golestan">
-                                <a href="{{ city_data.golestan.admin_url }}">
+                                <a href="{{ city_data.golestan.detail_url }}">
                                     {% if city_data.golestan %}
                                         {{ city_data.golestan.name }} ({{ city_data.golestan.avg }})
                                     {% else %}
@@ -345,7 +346,7 @@
                                 </a>
                             </li>
                             <li class="gilan">
-                                <a href="{{ city_data.gilan.admin_url }}">
+                                <a href="{{ city_data.gilan.detail_url }}">
                                     {% if city_data.gilan %}
                                         {{ city_data.gilan.name }} ({{ city_data.gilan.avg }})
                                     {% else %}
@@ -354,7 +355,7 @@
                                 </a>
                             </li>
                             <li class="lorestan">
-                                <a href="{{ city_data.lorestan.admin_url }}">
+                                <a href="{{ city_data.lorestan.detail_url }}">
                                     {% if city_data.lorestan %}
                                         {{ city_data.lorestan.name }} ({{ city_data.lorestan.avg }})
                                     {% else %}
@@ -363,7 +364,7 @@
                                 </a>
                             </li>
                             <li class="mazandaran">
-                                <a href="{{ city_data.mazandaran.admin_url }}">
+                                <a href="{{ city_data.mazandaran.detail_url }}">
                                     {% if city_data.mazandaran %}
                                         {{ city_data.mazandaran.name }} ({{ city_data.mazandaran.avg }})
                                     {% else %}
@@ -372,7 +373,7 @@
                                 </a>
                             </li>
                             <li class="markazi">
-                                <a href="{{ city_data.markazi.admin_url }}">
+                                <a href="{{ city_data.markazi.detail_url }}">
                                     {% if city_data.markazi %}
                                         {{ city_data.markazi.name }} ({{ city_data.markazi.avg }})
                                     {% else %}
@@ -381,7 +382,7 @@
                                 </a>
                             </li>
                             <li class="hormozgan">
-                                <a href="{{ city_data.hormozgan.admin_url }}">
+                                <a href="{{ city_data.hormozgan.detail_url }}">
                                     {% if city_data.hormozgan %}
                                         {{ city_data.hormozgan.name }} ({{ city_data.hormozgan.avg }})
                                     {% else %}
@@ -390,7 +391,7 @@
                                 </a>
                             </li>
                             <li class="hamadan">
-                                <a href="{{ city_data.hamadan.admin_url }}">
+                                <a href="{{ city_data.hamadan.detail_url }}">
                                     {% if city_data.hamadan %}
                                         {{ city_data.hamadan.name }} ({{ city_data.hamadan.avg }})
                                     {% else %}
@@ -399,7 +400,7 @@
                                 </a>
                             </li>
                             <li class="yazd">
-                                <a href="{{ city_data.yazd.admin_url }}">
+                                <a href="{{ city_data.yazd.detail_url }}">
                                     {% if city_data.yazd %}
                                         {{ city_data.yazd.name }} ({{ city_data.yazd.avg }})
                                     {% else %}
