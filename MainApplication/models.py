@@ -4,7 +4,7 @@ from django.db.models import Avg
 
 class City(models.Model):
     class CityType(models.TextChoices):
-        city = ('شهر \ استان', 'شهر \ استان')
+        city = ('شهر \\ استان', 'شهر \\ استان')
         island = ('جزیره', 'جزیره')         
     
     name = models.CharField(max_length=100, verbose_name="نام استان/جزیره")
