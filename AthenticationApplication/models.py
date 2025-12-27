@@ -1,0 +1,81 @@
+from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, UserManager
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.validators import UnicodeUsernameValidator
+from django.utils import timezone
+from django_jalali.db import models as jmodels
+from django.core.exceptions import ValidationError
+
+# Define the custom User model extending AbstractBaseUser and PermissionsMixin
+class User(AbstractBaseUser, PermissionsMixin):
+
+    # Validator for the username
+    username_validator = UnicodeUsernameValidator()
+
+    # Username field with custom validation and error messages
+    username = models.CharField(
+        _("username"),
+        max_length=150,
+        unique=True,
+        help_text=_("Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only."),
+        validators=[username_validator],
+        error_messages={
+            "unique": _("A user with that username already exists."),
+        },
+    )
+    
+    # Personal information fields
+    first_name = models.CharField(_("first name"), max_length=150)
+    last_name = models.CharField(_("last name"), max_length=150)
+    profile = models.ImageField(upload_to='profile_image/', blank=True, null=True, default='', verbose_name='تصویر پروفایل', help_text='لطفا سایز عکس ۱*۱ باشد تا دیزاین سایت زیباتر باشد و دقت کنید پسوند فایل موردنظر نیز jpeg یا jpg یا png باشد')
+    nationality_id = models.CharField(max_length=10, unique=True, verbose_name="کد ملی", null=True, blank=True)
+    phone_number = models.CharField(max_length=11, unique=True, verbose_name="شماره تلفن", null=True, blank=True)  
+    date_of_birth = jmodels.jDateField(null=True, blank=True, verbose_name="تاریخ تولد")      
+    email = models.EmailField(_("email address"), blank=True, null=True)
+
+    # User status fields
+    is_active = models.BooleanField(
+        verbose_name="فعال",  # Direct string for verbose name
+        default=True,
+        help_text="بجای حذف کاربر کافی است تیک این فیلد را بردارید تا این کاربر دیگر هیچ نوع دسترسی ای به وب اپلیکیشن نداشته باشد .",
+    )
+    
+    is_staff = models.BooleanField(
+        verbose_name="کارمند",  # Direct string for verbose name
+        default=True,
+        help_text="این فیلد نشان می‌دهد که آیا کاربر باید به عنوان کارمند فعالیت کند (اخطار : به کاربران کیوسک و اسکنر این دسترسی را ندهید)",  # Direct string for help text
+    )
+    
+    is_superuser = models.BooleanField(
+        verbose_name="ادمین",  # Direct string for verbose name
+        default=False,
+        help_text="این فیلد نشان می‌دهد که آیا کاربر دسترسی کامل به تمامی بخش هارا دارد یا خیر. (اخطار : به کاربران کیوسک و اسکنر این دسترسی را ندهید)",
+    )
+    
+    # Tracking fields for user creation and updates
+    date_joined = models.DateTimeField(_("date joined"), default=timezone.now)
+    update = models.DateTimeField(auto_now=True, verbose_name=_('زمان ویرایش'))
+
+    # Specific user permissions
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        related_name='custom_user_permissions',  # Unique related_name to avoid clashes
+        verbose_name=_("user permissions"),
+        blank=True,
+        help_text=_(
+            "Specific permissions for this user."
+        ),
+        related_query_name="user",
+    )
+
+    # Custom manager for the User model
+    objects = UserManager()
+
+    # Define the field to be used as the username
+    USERNAME_FIELD = "username"
+
+    # Meta information for ordering and naming the model in the admin
+    class Meta:
+        verbose_name = _("user")
+        verbose_name_plural = _("users")
+        ordering = ('-update',)
