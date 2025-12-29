@@ -15,7 +15,14 @@ import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+
+excel_file = BASE_DIR / "sample.xlsx"
+csv_file = BASE_DIR / "sample.csv"
+json_file_from_excel = BASE_DIR / "sample_from_excel.json"
+json_file_from_csv = BASE_DIR / "sample_from_csv.json"
+
+
 
 ENV_FILE = BASE_DIR / ".env.local"
 if ENV_FILE.exists():
@@ -95,10 +102,11 @@ DATABASES = {
         'NAME': os.environ.get('POSTGRES_DB', 'iranmapai'),
         'USER': os.environ.get('POSTGRES_USER', 'iranmapai'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'iranmapai'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'db'),
+        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
         'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
+
 
 
 # Password validation

@@ -10,4 +10,3 @@ urlpatterns = [
     path("", views.main, name="Main"),
     path("city/<slug:slug>/", views.city_detail, name="city_detail"),
 ]
-
