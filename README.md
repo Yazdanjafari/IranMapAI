@@ -70,7 +70,7 @@ Expected Postgres env vars:
 
 ### 1) Install dependencies
 ```bash
-pip install -r requriment.txt
+pip install -r requriments.txt
 ```
 
 ### 2) Migrate
@@ -91,7 +91,7 @@ python manage.py createsuperuser
 
 ### 5) Run the server
 ```bash
-python manage.py runserver
+python manage.py runserver 4000
 ```
 
 Open:
