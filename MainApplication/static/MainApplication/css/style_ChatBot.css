@@ -29,6 +29,7 @@ body {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 1000;
   overflow: hidden;
+  touch-action: manipulation;
 }
 
 #chatbot-toggler::before {
@@ -165,6 +166,7 @@ body.show-chatbot .chatbot-popup {
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: manipulation;
 }
 
 .chat-header #close-chatbot:hover {
@@ -388,6 +390,7 @@ body.show-chatbot .chatbot-popup {
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: manipulation;
 }
 
 .chat-form .chat-controls #send-message {
@@ -533,6 +536,34 @@ em-emoji-picker {
 * {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+@media (pointer: coarse) {
+  #chatbot-toggler {
+    height: 72px;
+    width: 72px;
+  }
+
+  .chatbot-popup {
+    width: min(92vw, 440px);
+  }
+
+  .chat-form .chat-controls button {
+    height: 44px;
+    width: 44px;
+    font-size: 1.25rem;
+  }
+
+  .chat-form .message-input {
+    font-size: 1.05rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 /* Responsive for mobile screen */
 @media screen and (max-width: 600px) {
   #chatbot-toggler {
@@ -607,4 +638,3 @@ em-emoji-picker {
     left: 25px;
   }
 } 
-

@@ -6,6 +6,7 @@ const fileUploadWrapper = document.querySelector("#file-upload-wrapper");
 const fileCancelButton = document.querySelector("#file-cancel");
 const chatbotToggler = document.querySelector("#chatbot-toggler");
 const closeChatbot = document.querySelector("#close-chatbot");
+const chatbotPopup = document.querySelector("#chatbot-popup");
 const speechToSpeechButton = document.querySelector("#speech-to-speech");
 
 // API setup
@@ -226,6 +227,17 @@ const picker = new EmojiMart.Picker({
 
 document.querySelector(".chat-form").appendChild(picker);
 
+const setChatbotState = (isOpen) => {
+  if (chatbotToggler) {
+    chatbotToggler.setAttribute("aria-expanded", String(Boolean(isOpen)));
+  }
+  if (chatbotPopup) {
+    chatbotPopup.setAttribute("aria-hidden", String(!isOpen));
+  }
+};
+
+setChatbotState(document.body.classList.contains("show-chatbot"));
+
 
 
 
@@ -236,10 +248,29 @@ document
 
 chatbotToggler.addEventListener("click", () => { 
     document.body.classList.toggle("show-chatbot");
+    const isOpen = document.body.classList.contains("show-chatbot");
+    setChatbotState(isOpen);
+    if (isOpen && messageInput) {
+      messageInput.focus();
+    }
   });
 
   closeChatbot.addEventListener("click", () => { 
     document.body.classList.remove("show-chatbot");
+    setChatbotState(false);
+    if (chatbotToggler) {
+      chatbotToggler.focus();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.body.classList.contains("show-chatbot")) {
+      document.body.classList.remove("show-chatbot");
+      setChatbotState(false);
+      if (chatbotToggler) {
+        chatbotToggler.focus();
+      }
+    }
   });
 
 // Speech-to-Speech functionality
