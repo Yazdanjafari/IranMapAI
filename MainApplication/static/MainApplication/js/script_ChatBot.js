@@ -4,14 +4,18 @@ const sendMessageButton = document.querySelector("#send-message");
 const fileInput = document.querySelector("#file-input");
 const fileUploadWrapper = document.querySelector("#file-upload-wrapper");
 const fileCancelButton = document.querySelector("#file-cancel");
+const fileUploadButton = document.querySelector("#file-upload");
 const chatbotToggler = document.querySelector("#chatbot-toggler");
 const closeChatbot = document.querySelector("#close-chatbot");
 const chatbotPopup = document.querySelector("#chatbot-popup");
 const speechToSpeechButton = document.querySelector("#speech-to-speech");
+const recordingTimer = document.querySelector("#recording-timer");
 
 // API setup
-const API_KEY = "AIzaSyAt-vJeLT_P5AlfyYDpOUZfQHmqg3ar_Kg";
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+const CHAT_API_BASE = (document.body.getAttribute("data-chat-api-base") || window.location.origin).replace(/\/$/, "");
+const API_URL = `${CHAT_API_BASE}/api/v1/query/text`;
+const DEFAULT_TEMPERATURE = 0.7;
+const DEFAULT_MAX_TOKENS = 2500;
 
 const userData = {
   message: null,
@@ -21,7 +25,6 @@ const userData = {
   },
 };
 
-const chatHistory = [];
 const initialInputHeight = messageInput.scrollHeight;
 
 // Create message element with dynamic classes and return it
@@ -32,58 +35,64 @@ const createMessageElement = (content, ...classes) => {
   return div;
 };
 
+const extractResponseText = (data) => {
+  if (!data) return null;
+  if (typeof data === "string") return data;
+  if (data.data) {
+    const nested = extractResponseText(data.data);
+    if (nested) return nested;
+  }
+  if (typeof data.response === "string") return data.response;
+  if (typeof data.answer === "string") return data.answer;
+  if (typeof data.content === "string") return data.content;
+  if (typeof data.text === "string") return data.text;
+  if (typeof data.result === "string") return data.result;
+  if (data.message && typeof data.message === "string") {
+    const normalized = data.message.trim().toLowerCase();
+    if (normalized !== "query processed successfully") {
+      return data.message;
+    }
+  }
+  if (Array.isArray(data.choices) && data.choices[0]?.message?.content) {
+    return data.choices[0].message.content;
+  }
+  if (Array.isArray(data.candidates) && data.candidates[0]?.content?.parts?.[0]?.text) {
+    return data.candidates[0].content.parts[0].text;
+  }
+  return null;
+};
+
 // Generate bot response using API
 const generateBotResponse = async (incomingMessageDiv) => {
   const messageElement = incomingMessageDiv.querySelector(".message-text");
 
-  // Add user message to chat history
-  chatHistory.push({
-    role: "user",
-    parts: [
-      { text: userData.message },
-      ...(userData.file.data ? [{ inline_data: userData.file }] : []),
-    ],
-  });
-
-  // API request options
   const requestOptions = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: chatHistory,
+      query: userData.message,
+      temperature: DEFAULT_TEMPERATURE,
+      max_tokens: DEFAULT_MAX_TOKENS,
     }),
   };
 
   try {
     // Fetch bot response from API
     const response = await fetch(API_URL, requestOptions);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error.message);
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const errorText =
+        (data && (data.message || data.error || data.detail)) ||
+        "خطا در ارتباط با سرویس دستیار.";
+      throw new Error(errorText);
+    }
 
     // Extract and display the bot response
-    const apiResponseText = data.candidates[0].content.parts[0].text
+    const apiResponseText = (extractResponseText(data) || "پاسخی دریافت نشد.")
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .trim();
     messageElement.innerText = apiResponseText;
 
-    // Add bot response to chat history
-    chatHistory.push({
-      role: "model",
-      parts: [
-        { text: apiResponseText }
-      ],
-    });
-
-    // Speak the bot's response if speech-to-speech is enabled
-    if (speechToSpeechButton && recognition) {
-      speechToSpeechButton.classList.add('processing');
-      speechToSpeechButton.textContent = 'hourglass_empty';
-      setTimeout(() => {
-        if (typeof speakText === 'function') {
-          speakText(apiResponseText);
-        }
-      }, 500);
-    }
   } catch (error) {
     console.log(error);
     messageElement.innerText = error.message;
@@ -186,25 +195,27 @@ messageInput.addEventListener("input", (e) => {
 });
 
 // Handle file input change
-fileInput.addEventListener("change", () => {
-  const file = fileInput.files[0];
-  if (!file) return;
+if (fileInput) {
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const base64String = e.target.result.split(",")[1];
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64String = e.target.result.split(",")[1];
 
-    // Store file data in userData
-    userData.file = {
-      data: base64String,
-      mime_type: file.type,
+      // Store file data in userData
+      userData.file = {
+        data: base64String,
+        mime_type: file.type,
+      };
+
+      fileInput.value = "";
     };
 
-    fileInput.value = "";
-  };
-
-  reader.readAsDataURL(file);
-});
+    reader.readAsDataURL(file);
+  });
+}
 
 // Emoji picker setup
 const picker = new EmojiMart.Picker({
@@ -242,9 +253,9 @@ setChatbotState(document.body.classList.contains("show-chatbot"));
 
 
 sendMessageButton.addEventListener("click", (e) => handleOutgoingMessage(e));
-document
-  .querySelector("#file-upload")
-  .addEventListener("click", () => fileInput.click());
+if (fileUploadButton && fileInput) {
+  fileUploadButton.addEventListener("click", () => fileInput.click());
+}
 
 chatbotToggler.addEventListener("click", () => { 
     document.body.classList.toggle("show-chatbot");
@@ -273,159 +284,234 @@ chatbotToggler.addEventListener("click", () => {
     }
   });
 
-// Speech-to-Speech functionality
-let recognition = null;
-let synthesis = window.speechSynthesis;
-let isListening = false;
-let isSpeaking = false;
-let currentUtterance = null;
+// Voice query functionality
+const VOICE_API_URL = `${CHAT_API_BASE}/api/v1/query/voice`;
+const VOICE_LANGUAGE = "fa-IR";
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+let isPlayingAudio = false;
+let currentAudio = null;
+let recordingTimerInterval = null;
+let recordingStartTime = null;
 
-// Initialize Speech Recognition
-const initSpeechRecognition = () => {
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    console.warn('Speech recognition not supported in this browser');
-    speechToSpeechButton.style.display = 'none';
-    return false;
-  }
-
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  recognition = new SpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = false;
-  recognition.lang = 'en-US'; // You can change this to 'fa-IR' for Persian/Farsi
-
-  recognition.onstart = () => {
-    isListening = true;
-    speechToSpeechButton.classList.add('listening');
-    speechToSpeechButton.classList.remove('speaking', 'processing');
-    speechToSpeechButton.textContent = 'mic';
-  };
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    messageInput.value = transcript;
-    messageInput.dispatchEvent(new Event("input"));
-    
-    // Automatically send the message
-    setTimeout(() => {
-      handleOutgoingMessage(new Event('submit'));
-    }, 300);
-  };
-
-  recognition.onerror = (event) => {
-    console.error('Speech recognition error:', event.error);
-    resetSpeechButton();
-    
-    // Show error message
-    const errorMessage = createMessageElement(
-      `<svg 
-        class="bot-avatar"
-        xmlns="http://www.w3.org/2000/svg"
-        width="50"
-        height="50"
-        viewBox="0 0 1024 1024"
-      >
-        <path
-          d="M738.3 287.6H285.7c-59 0-106.8 47.8-106.8 106.8v303.1c0 59 47.8 106.8 106.8 106.8h81.5v111.1c0 .7.8 1.1 1.4.7l166.9-110.6 41.8-.8h117.4l43.6-.4c59 0 106.8-47.8 106.8-106.8V394.5c0-59-47.8-106.9-106.8-106.9zM351.7 448.2c0-29.5 23.9-53.5 53.5-53.5s53.5 23.9 53.5 53.5-23.9 53.5-53.5 53.5-53.5-23.9-53.5-53.5zm157.9 267.1c-67.8 0-123.8-47.5-132.3-109h264.6c-8.6 61.5-64.5 109-132.3 109zm110-213.7c-29.5 0-53.5-23.9-53.5-53.5s23.9-53.5 53.5-53.5 53.5 23.9 53.5 53.5-23.9 53.5-53.5 53.5zM867.2 644.5V453.1h26.5c19.4 0 35.1 15.7 35.1 35.1v121.1c0 19.4-15.7 35.1-35.1 35.1h-26.5zM95.2 609.4V488.2c0-19.4 15.7-35.1 35.1-35.1h26.5v191.3h-26.5c-19.4 0-35.1-15.7-35.1-35.1zM561.5 149.6c0 23.4-15.6 43.3-36.9 49.7v44.9h-30v-44.9c-21.4-6.5-36.9-26.3-36.9-49.7 0-28.6 23.3-51.9 51.9-51.9s51.9 23.3 51.9 51.9z"
-        ></path>
-      </svg>
-      <div class="message-text">Speech recognition error: ${event.error}. Please try again.</div>`,
-      "bot-message"
-    );
-    chatBody.appendChild(errorMessage);
+const appendMessage = (text, messageClass) => {
+  if (!chatBody) return;
+  const message = createMessageElement(`<div class="message-text"></div>`, messageClass);
+  message.querySelector(".message-text").textContent = text;
+  chatBody.appendChild(message);
+  setTimeout(() => {
     chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
-  };
+  }, 100);
+};
 
-  recognition.onend = () => {
-    isListening = false;
-    if (!isSpeaking) {
-      resetSpeechButton();
+const appendAudioMessage = (audioBlob) => {
+  if (!chatBody) return;
+  const audioUrl = URL.createObjectURL(audioBlob);
+  const message = createMessageElement(
+    `<div class="message-text">پاسخ صوتی آماده است.</div>
+     <audio class="voice-response" controls></audio>`,
+    "bot-message"
+  );
+  const audioEl = message.querySelector("audio");
+  audioEl.src = audioUrl;
+  audioEl.onended = () => {
+    URL.revokeObjectURL(audioUrl);
+    if (currentAudio === audioEl) {
+      currentAudio = null;
+      isPlayingAudio = false;
+      setSpeechButtonState("idle");
     }
   };
+  audioEl.onerror = () => {
+    URL.revokeObjectURL(audioUrl);
+    if (currentAudio === audioEl) {
+      currentAudio = null;
+      isPlayingAudio = false;
+      setSpeechButtonState("idle");
+    }
+  };
+  chatBody.appendChild(message);
+  setTimeout(() => {
+    chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
+  }, 100);
 
-  return true;
+  currentAudio = audioEl;
+  isPlayingAudio = true;
+  setSpeechButtonState("playing");
+  audioEl.play().catch(() => {
+    isPlayingAudio = false;
+    setSpeechButtonState("idle");
+  });
 };
 
-// Reset speech button to default state
-const resetSpeechButton = () => {
-  if (speechToSpeechButton) {
-    speechToSpeechButton.classList.remove('listening', 'speaking', 'processing');
+const setRecordingTimerVisible = (isVisible) => {
+  if (!recordingTimer) return;
+  recordingTimer.classList.toggle("is-active", Boolean(isVisible));
+  recordingTimer.setAttribute("aria-hidden", String(!isVisible));
+  if (!isVisible) {
+    recordingTimer.textContent = "00:00";
+  }
+};
+
+const formatElapsedTime = (startTime) => {
+  const elapsed = Math.max(0, Date.now() - startTime);
+  const minutes = Math.floor(elapsed / 60000);
+  const seconds = Math.floor((elapsed % 60000) / 1000);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const setSpeechButtonState = (state) => {
+  if (!speechToSpeechButton) return;
+  speechToSpeechButton.classList.remove('listening', 'speaking', 'processing');
+  if (state === "recording") {
+    speechToSpeechButton.classList.add('listening');
     speechToSpeechButton.textContent = 'mic';
-  }
-};
-
-// Speak text using Web Speech API
-const speakText = (text) => {
-  if (isSpeaking) {
-    synthesis.cancel();
-  }
-
-  currentUtterance = new SpeechSynthesisUtterance(text);
-  currentUtterance.lang = 'en-US'; // You can change this to 'fa-IR' for Persian/Farsi
-  currentUtterance.rate = 1;
-  currentUtterance.pitch = 1;
-  currentUtterance.volume = 1;
-
-  currentUtterance.onstart = () => {
-    isSpeaking = true;
+    setRecordingTimerVisible(true);
+  } else if (state === "processing") {
+    speechToSpeechButton.classList.add('processing');
+    speechToSpeechButton.textContent = 'hourglass_empty';
+    setRecordingTimerVisible(false);
+  } else if (state === "playing") {
     speechToSpeechButton.classList.add('speaking');
-    speechToSpeechButton.classList.remove('listening', 'processing');
     speechToSpeechButton.textContent = 'volume_up';
-  };
-
-  currentUtterance.onend = () => {
-    isSpeaking = false;
-    resetSpeechButton();
-  };
-
-  currentUtterance.onerror = (event) => {
-    console.error('Speech synthesis error:', event.error);
-    isSpeaking = false;
-    resetSpeechButton();
-  };
-
-  synthesis.speak(currentUtterance);
-};
-
-// Stop speaking
-const stopSpeaking = () => {
-  if (isSpeaking) {
-    synthesis.cancel();
-    isSpeaking = false;
-    resetSpeechButton();
+    setRecordingTimerVisible(false);
+  } else {
+    speechToSpeechButton.textContent = 'mic';
+    setRecordingTimerVisible(false);
   }
 };
 
-// Handle speech-to-speech button click
+const stopAudioPlayback = () => {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+  isPlayingAudio = false;
+  setSpeechButtonState("idle");
+};
+
+const startRecordingTimer = () => {
+  if (!recordingTimer) return;
+  recordingStartTime = Date.now();
+  recordingTimer.textContent = "00:00";
+  if (recordingTimerInterval) {
+    clearInterval(recordingTimerInterval);
+  }
+  recordingTimerInterval = setInterval(() => {
+    recordingTimer.textContent = formatElapsedTime(recordingStartTime);
+  }, 1000);
+};
+
+const stopRecordingTimer = () => {
+  if (recordingTimerInterval) {
+    clearInterval(recordingTimerInterval);
+    recordingTimerInterval = null;
+  }
+  recordingStartTime = null;
+  setRecordingTimerVisible(false);
+};
+
+const sendVoiceQuery = async (audioBlob, filename) => {
+  setSpeechButtonState("processing");
+  const formData = new FormData();
+  formData.append("audio", audioBlob, filename);
+  formData.append("language", VOICE_LANGUAGE);
+
+  try {
+    const response = await fetch(VOICE_API_URL, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      appendMessage(errorText || "خطا در ارتباط با سرویس صوتی.", "bot-message");
+      setSpeechButtonState("idle");
+      return;
+    }
+
+    const transcription = response.headers.get("X-Transcription");
+    if (transcription) {
+      appendMessage(transcription, "user-message");
+    }
+
+    const audioResponse = await response.blob();
+    appendAudioMessage(audioResponse);
+  } catch (error) {
+    appendMessage("ارتباط با سرویس صوتی ناموفق بود.", "bot-message");
+    setSpeechButtonState("idle");
+  }
+};
+
+const startVoiceCapture = async () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    appendMessage("مرورگر شما از ضبط صدا پشتیبانی نمی‌کند.", "bot-message");
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedChunks = [];
+
+    const preferredType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : '';
+
+    mediaRecorder = preferredType
+      ? new MediaRecorder(stream, { mimeType: preferredType })
+      : new MediaRecorder(stream);
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = async () => {
+      const mimeType = mediaRecorder.mimeType || "audio/webm";
+      const extension = mimeType.includes("ogg") ? "ogg" : mimeType.includes("wav") ? "wav" : "webm";
+      const audioBlob = new Blob(recordedChunks, { type: mimeType });
+      stream.getTracks().forEach((track) => track.stop());
+      isRecording = false;
+      stopRecordingTimer();
+      await sendVoiceQuery(audioBlob, `recording.${extension}`);
+    };
+
+    mediaRecorder.start();
+    isRecording = true;
+    setSpeechButtonState("recording");
+    startRecordingTimer();
+  } catch (error) {
+    appendMessage("دسترسی به میکروفن امکان‌پذیر نیست.", "bot-message");
+    stopRecordingTimer();
+    setSpeechButtonState("idle");
+  }
+};
+
+const stopVoiceCapture = () => {
+  if (mediaRecorder && isRecording) {
+    mediaRecorder.stop();
+    setSpeechButtonState("processing");
+    stopRecordingTimer();
+  }
+};
+
 if (speechToSpeechButton) {
   speechToSpeechButton.addEventListener('click', () => {
-    if (isSpeaking) {
-      // If speaking, stop it
-      stopSpeaking();
+    if (isRecording) {
+      stopVoiceCapture();
       return;
     }
 
-    if (isListening) {
-      // If listening, stop it
-      if (recognition) {
-        recognition.stop();
-      }
+    if (isPlayingAudio) {
+      stopAudioPlayback();
       return;
     }
 
-    // Start listening
-    if (recognition) {
-      try {
-        recognition.start();
-      } catch (error) {
-        console.error('Error starting recognition:', error);
-        if (typeof resetSpeechButton === 'function') {
-          resetSpeechButton();
-        }
-      }
-    }
+    startVoiceCapture();
   });
-
-  // Initialize speech recognition when page loads
-  initSpeechRecognition();
 }

@@ -82,7 +82,7 @@
             }
         </style>
     </head>
-    <body>
+    <body data-chat-api-base="http://localhost:8000">
         <div class="city-detail">
             <div class="city-header">
                 <a class="breadcrumb-link" href="{% url 'Authenticate:Main' %}">← بازگشت به نقشه</a>
@@ -141,7 +141,7 @@
                 ></path>
               </svg>
 
-              <h2 class="logo-text">Chatbot</h2>
+              <h2 class="logo-text">دستیار هوشمند</h2>
             </div>
             <button id="close-chatbot"
             class="material-symbols-rounded" type="button" aria-label="بستن گفتگوی چت‌بات">keyboard_arrow_down</button>
@@ -175,10 +175,7 @@
               <textarea placeholder="Message..." class="message-input" aria-label="متن پیام" required></textarea>
               <div class="chat-controls">
                 <button type="button" id="emoji-picker" class="material-symbols-rounded" aria-label="انتخاب ایموجی">sentiment_satisfied</button>
-                <div class="file-upload-wrapper">
-                  <input type="file" accept="images/*" id="file-input" hidden>
-                  <button type="button" id="file-upload" class="material-symbols-rounded" aria-label="ضمیمه تصویر">attach_file</button>
-                </div>
+                <span id="recording-timer" class="recording-timer" aria-live="polite" aria-hidden="true">00:00</span>
                 <button type="button" id="speech-to-speech" class="material-symbols-rounded" title="Speech to Speech" aria-label="گفتار به گفتار">mic</button>
                 <button type="submit" id="send-message" class="material-symbols-rounded" aria-label="ارسال پیام">arrow_upward</button>
               </div>

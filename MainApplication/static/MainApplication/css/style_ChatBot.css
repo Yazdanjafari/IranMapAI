@@ -377,6 +377,29 @@ body.show-chatbot .chatbot-popup {
   padding-left: 6px;
 }
 
+.chat-form .recording-timer {
+  display: none;
+  min-width: 52px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(83, 80, 196, 0.12);
+  color: #3d39ac;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chat-form .recording-timer.is-active {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-body .voice-response {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .chat-form .chat-controls button {
   height: 38px;
   width: 38px;
