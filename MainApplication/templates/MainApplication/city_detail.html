@@ -82,7 +82,11 @@
             }
         </style>
     </head>
-    <body data-chat-api-base="http://localhost:8000">
+    <body data-chat-api-base="http://localhost:8000"
+          data-chat-user="{% if request.user.is_authenticated %}{{ request.user.username|escape }}{% else %}anonymous{% endif %}"
+          data-page-type="city"
+          data-city-name="{{ city_name|escape }}"
+          data-city-slug="{{ city_slug|escape }}">
         <div class="city-detail">
             <div class="city-header">
                 <a class="breadcrumb-link" href="{% url 'Authenticate:Main' %}">← بازگشت به نقشه</a>
@@ -175,6 +179,7 @@
               <textarea placeholder="Message..." class="message-input" aria-label="متن پیام" required></textarea>
               <div class="chat-controls">
                 <button type="button" id="emoji-picker" class="material-symbols-rounded" aria-label="انتخاب ایموجی">sentiment_satisfied</button>
+                <button type="button" id="clear-chat" class="material-symbols-rounded" aria-label="پاک کردن گفتگو">delete_sweep</button>
                 <span id="recording-timer" class="recording-timer" aria-live="polite" aria-hidden="true">00:00</span>
                 <button type="button" id="speech-to-speech" class="material-symbols-rounded" title="Speech to Speech" aria-label="گفتار به گفتار">mic</button>
                 <button type="submit" id="send-message" class="material-symbols-rounded" aria-label="ارسال پیام">arrow_upward</button>
@@ -190,6 +195,11 @@
               return;
             }
             var fieldData = {{ field_data_json|safe }};
+            window.citySummary = {
+              name: "{{ city_name|escapejs }}",
+              slug: "{{ city_slug|escapejs }}",
+              fields: fieldData,
+            };
             var allFieldLabels = fieldData.map(function(item) { return item.name; });
             var allFieldScores = fieldData.map(function(item) { return item.score; });
 

@@ -134,6 +134,7 @@ def city_detail(request, slug: str):
         "MainApplication/city_detail.html",
         {
             "city_name": city_name,
+            "city_slug": slug,
             "fields": field_types,
             "field_data_json": json.dumps(field_data, ensure_ascii=False),
         },

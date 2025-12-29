@@ -416,6 +416,14 @@ body.show-chatbot .chatbot-popup {
   touch-action: manipulation;
 }
 
+.chat-form .chat-controls #clear-chat {
+  color: #b03030;
+}
+
+.chat-form .chat-controls #clear-chat:hover {
+  background: rgba(176, 48, 48, 0.12);
+}
+
 .chat-form .chat-controls #send-message {
   color: #fff;
   display: none;

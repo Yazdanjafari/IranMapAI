@@ -10,12 +10,22 @@ const closeChatbot = document.querySelector("#close-chatbot");
 const chatbotPopup = document.querySelector("#chatbot-popup");
 const speechToSpeechButton = document.querySelector("#speech-to-speech");
 const recordingTimer = document.querySelector("#recording-timer");
+const clearChatButton = document.querySelector("#clear-chat");
 
 // API setup
 const CHAT_API_BASE = (document.body.getAttribute("data-chat-api-base") || window.location.origin).replace(/\/$/, "");
 const API_URL = `${CHAT_API_BASE}/api/v1/query/text`;
 const DEFAULT_TEMPERATURE = 0.7;
-const DEFAULT_MAX_TOKENS = 2500;
+const DEFAULT_MAX_TOKENS = 5000;
+const SESSION_DURATION_MINUTES = 20;
+const SESSION_DURATION_MS = SESSION_DURATION_MINUTES * 60 * 1000;
+const userKey = document.body.getAttribute("data-chat-user") || "anonymous";
+const pageType = document.body.getAttribute("data-page-type") || "unknown";
+const pageCityName = document.body.getAttribute("data-city-name") || "";
+const pageCitySlug = document.body.getAttribute("data-city-slug") || "";
+const SESSION_STORAGE_KEY = `chatSession:${userKey}`;
+const HISTORY_STORAGE_PREFIX = `chatHistory:${userKey}:`;
+const CITY_CONTEXT_KEY = `cityContext:${userKey}`;
 
 const userData = {
   message: null,
@@ -26,6 +36,79 @@ const userData = {
 };
 
 const initialInputHeight = messageInput.scrollHeight;
+const initialChatBodyMarkup = chatBody ? chatBody.innerHTML : "";
+
+const createSession = () => {
+  const now = Date.now();
+  const session = {
+    id: `${now}-${Math.random().toString(16).slice(2, 10)}`,
+    startedAt: now,
+    lastActivity: now,
+    activeCitySlug: pageCitySlug || null,
+  };
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  return session;
+};
+
+const loadSession = () => {
+  const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!raw) {
+    return { session: createSession(), isNew: true };
+  }
+  try {
+    const session = JSON.parse(raw);
+    const startedAt = session.startedAt || 0;
+    if (!startedAt || Date.now() - startedAt > SESSION_DURATION_MS) {
+      return { session: createSession(), isNew: true };
+    }
+    return { session, isNew: false };
+  } catch (error) {
+    return { session: createSession(), isNew: true };
+  }
+};
+
+const persistSession = (session) => {
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+};
+
+const updateSessionActivity = () => {
+  session.lastActivity = Date.now();
+  persistSession(session);
+};
+
+const getHistoryKey = () => `${HISTORY_STORAGE_PREFIX}${session.id}`;
+
+const loadHistory = () => {
+  const raw = localStorage.getItem(getHistoryKey());
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+};
+
+const persistHistory = () => {
+  localStorage.setItem(getHistoryKey(), JSON.stringify(chatHistory));
+  updateSessionActivity();
+};
+
+const ensureActiveSession = () => {
+  const startedAt = session.startedAt || 0;
+  if (startedAt && Date.now() - startedAt <= SESSION_DURATION_MS) {
+    return;
+  }
+  session = createSession();
+  chatHistory = [];
+  persistHistory();
+  if (chatBody) {
+    chatBody.innerHTML = initialChatBodyMarkup;
+  }
+};
+
+let { session, isNew: isNewSession } = loadSession();
+let chatHistory = loadHistory();
 
 // Create message element with dynamic classes and return it
 const createMessageElement = (content, ...classes) => {
@@ -34,6 +117,155 @@ const createMessageElement = (content, ...classes) => {
   div.innerHTML = content;
   return div;
 };
+
+const getActiveCitySlug = () => pageCitySlug || session.activeCitySlug || null;
+
+const loadCityContextMap = () => {
+  const raw = localStorage.getItem(CITY_CONTEXT_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+};
+
+const persistCityContextMap = (map) => {
+  localStorage.setItem(CITY_CONTEXT_KEY, JSON.stringify(map));
+};
+
+const updateCityContextFromPage = () => {
+  if (!pageCitySlug || !window.citySummary || !Array.isArray(window.citySummary.fields)) {
+    return;
+  }
+  const fields = window.citySummary.fields.map((field) => ({
+    name: field.name,
+    score: Number(field.score) || 0,
+  }));
+  const totalScore = fields.reduce((sum, field) => sum + field.score, 0);
+  const averageScore = fields.length ? Math.round((totalScore / fields.length) * 100) / 100 : 0;
+  const contextMap = loadCityContextMap();
+  contextMap[pageCitySlug] = {
+    name: pageCityName || window.citySummary.name,
+    slug: pageCitySlug,
+    averageScore,
+    fields,
+    updatedAt: Date.now(),
+  };
+  persistCityContextMap(contextMap);
+  session.activeCitySlug = pageCitySlug;
+  persistSession(session);
+};
+
+const getActiveCityContext = () => {
+  const activeSlug = getActiveCitySlug();
+  if (!activeSlug) return null;
+  const contextMap = loadCityContextMap();
+  return contextMap[activeSlug] || null;
+};
+
+const buildHistoryContextText = (currentQuery) => {
+  let recent = chatHistory.slice(-6);
+  if (currentQuery) {
+    const lastItem = recent[recent.length - 1];
+    if (lastItem && lastItem.role === "user" && lastItem.text === currentQuery) {
+      recent = recent.slice(0, -1);
+    }
+  }
+  if (!recent.length) return "";
+  return recent
+    .map((item) => `${item.role === "user" ? "کاربر" : "دستیار"}: ${item.text}`)
+    .join("\n");
+};
+
+const buildCityContextText = () => {
+  const cityContext = getActiveCityContext();
+  if (!cityContext) return "";
+  const fieldsText = cityContext.fields
+    .map((field) => `${field.name}: ${field.score}`)
+    .join("، ");
+  return `شهر: ${cityContext.name}\nمیانگین امتیازها: ${cityContext.averageScore}\nامتیازها: ${fieldsText}`;
+};
+
+const buildAugmentedQuery = (query) => {
+  const contextParts = [];
+  const cityContextText = buildCityContextText();
+  if (cityContextText) {
+    contextParts.push(`اطلاعات شهر:\n${cityContextText}`);
+  }
+  const historyContextText = buildHistoryContextText(query);
+  if (historyContextText) {
+    contextParts.push(`گفتگوی اخیر:\n${historyContextText}`);
+  }
+  if (!contextParts.length) return query;
+  return `<<<\n${contextParts.join("\n\n")}\n>>>\n\nپرسش کاربر: ${query}`;
+};
+
+const persistMessage = (role, text) => {
+  if (!text) return;
+  ensureActiveSession();
+  chatHistory.push({
+    role,
+    text,
+    timestamp: Date.now(),
+    citySlug: getActiveCitySlug(),
+  });
+  persistHistory();
+};
+
+const appendMessage = (text, messageClass, options = {}) => {
+  if (!chatBody) return;
+  const message = createMessageElement(`<div class="message-text"></div>`, messageClass);
+  message.querySelector(".message-text").textContent = text;
+  chatBody.appendChild(message);
+  if (options.persist !== false) {
+    const role = messageClass.includes("user") ? "user" : "bot";
+    persistMessage(role, text);
+  }
+  setTimeout(() => {
+    chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
+  }, 100);
+};
+
+const renderStoredHistory = () => {
+  if (!chatBody) return;
+  if (!chatHistory.length) {
+    chatBody.innerHTML = initialChatBodyMarkup;
+    return;
+  }
+  chatBody.innerHTML = "";
+  chatHistory.forEach((item) => {
+    const messageClass = item.role === "user" ? "user-message" : "bot-message";
+    appendMessage(item.text, messageClass, { persist: false });
+  });
+};
+
+updateCityContextFromPage();
+if (pageCitySlug) {
+  session.activeCitySlug = pageCitySlug;
+  persistSession(session);
+}
+if (isNewSession) {
+  chatHistory = [];
+  persistHistory();
+}
+renderStoredHistory();
+
+const clearChatHistory = () => {
+  chatHistory = [];
+  localStorage.removeItem(getHistoryKey());
+  if (chatBody) {
+    chatBody.innerHTML = initialChatBodyMarkup;
+  }
+  updateSessionActivity();
+};
+
+if (clearChatButton) {
+  clearChatButton.addEventListener("click", () => {
+    clearChatHistory();
+  });
+}
 
 const extractResponseText = (data) => {
   if (!data) return null;
@@ -66,13 +298,25 @@ const extractResponseText = (data) => {
 const generateBotResponse = async (incomingMessageDiv) => {
   const messageElement = incomingMessageDiv.querySelector(".message-text");
 
+  const augmentedQuery = buildAugmentedQuery(userData.message);
+  const cityContext = getActiveCityContext();
   const requestOptions = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      query: userData.message,
+      query: augmentedQuery,
       temperature: DEFAULT_TEMPERATURE,
       max_tokens: DEFAULT_MAX_TOKENS,
+      metadata: cityContext
+        ? {
+            city: {
+              name: cityContext.name,
+              slug: cityContext.slug,
+              average_score: cityContext.averageScore,
+              fields: cityContext.fields,
+            },
+          }
+        : undefined,
     }),
   };
 
@@ -92,14 +336,13 @@ const generateBotResponse = async (incomingMessageDiv) => {
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .trim();
     messageElement.innerText = apiResponseText;
+    persistMessage("bot", apiResponseText);
 
   } catch (error) {
     console.log(error);
     messageElement.innerText = error.message;
     messageElement.style.color = "#ff0000";
-    if (speechToSpeechButton && typeof resetSpeechButton === 'function') {
-      resetSpeechButton();
-    }
+    persistMessage("bot", error.message);
   } finally {
     incomingMessageDiv.classList.remove("thinking");
     // Smooth scroll to bottom
@@ -115,29 +358,14 @@ const generateBotResponse = async (incomingMessageDiv) => {
 const handleOutgoingMessage = (e) => {
   e.preventDefault();
   userData.message = messageInput.value.trim();
+  if (!userData.message) {
+    return;
+  }
+  ensureActiveSession();
   messageInput.value = "";
   messageInput.dispatchEvent(new Event("input"));
 
-  // Create and display user message
-  const messageContent = `<div class="message-text"></div>
-                          ${
-                            userData.file.data
-                              ? `<img src=data:${userData.file.mime_type};base64,${userData.file.data}" class="attachment" />`
-                              : ""
-                          }`;
-  const outgoingMessageDiv = createMessageElement(
-    messageContent,
-    "user-message"
-  );
-  outgoingMessageDiv.querySelector(".message-text").textContent =
-    userData.message;
-  chatBody.appendChild(outgoingMessageDiv);
-  // Smooth scroll to bottom
-  setTimeout(() => {
-    if (chatBody) {
-      chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
-    }
-  }, 100);
+  appendMessage(userData.message, "user-message");
 
   // Simulate bot response with thinking indicator after a dely
   setTimeout(() => {
@@ -295,16 +523,6 @@ let currentAudio = null;
 let recordingTimerInterval = null;
 let recordingStartTime = null;
 
-const appendMessage = (text, messageClass) => {
-  if (!chatBody) return;
-  const message = createMessageElement(`<div class="message-text"></div>`, messageClass);
-  message.querySelector(".message-text").textContent = text;
-  chatBody.appendChild(message);
-  setTimeout(() => {
-    chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
-  }, 100);
-};
-
 const appendAudioMessage = (audioBlob) => {
   if (!chatBody) return;
   const audioUrl = URL.createObjectURL(audioBlob);
@@ -332,6 +550,7 @@ const appendAudioMessage = (audioBlob) => {
     }
   };
   chatBody.appendChild(message);
+  persistMessage("bot", "پاسخ صوتی آماده است.");
   setTimeout(() => {
     chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
   }, 100);
@@ -414,10 +633,23 @@ const stopRecordingTimer = () => {
 };
 
 const sendVoiceQuery = async (audioBlob, filename) => {
+  ensureActiveSession();
   setSpeechButtonState("processing");
   const formData = new FormData();
   formData.append("audio", audioBlob, filename);
   formData.append("language", VOICE_LANGUAGE);
+  const cityContextText = buildCityContextText();
+  const historyContextText = buildHistoryContextText();
+  const contextParts = [];
+  if (cityContextText) {
+    contextParts.push(`اطلاعات شهر:\n${cityContextText}`);
+  }
+  if (historyContextText) {
+    contextParts.push(`گفتگوی اخیر:\n${historyContextText}`);
+  }
+  if (contextParts.length) {
+    formData.append("context", contextParts.join("\n\n"));
+  }
 
   try {
     const response = await fetch(VOICE_API_URL, {
