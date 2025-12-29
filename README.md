@@ -1,55 +1,143 @@
-# Project Setup (Django)
+# IranMapAI
 
-## Prerequisites
+## Overview
+IranMapAI is a Django web app that visualizes Iranian provinces and islands on an SVG map, colors each region by its average score, and provides a city detail page with charts and a client-side chatbot. The backend stores cities, score fields, and per-city scores; the frontend renders the map and dashboards with static assets and CDN charts.
 
-* Python **3.9+**
-* `pip`
+## How the dashboard works
 
-## Setup & Run
+### Data flow
+1) **City + score data** is stored in Postgres (or SQLite for local dev).
+2) **`MainApplication.views.main`** loads all cities, maps each city name to a slug used by the SVG, computes an average score, and assigns a color bucket.
+3) **`iranmap.html`** receives `city_data` and `city_colors_by_slug`, then colors the SVG provinces via jQuery and links each province to its detail page.
+4) **`MainApplication.views.city_detail`** loads all field types and scores for the selected city and serializes them into JSON.
+5) **`city_detail.html`** uses ApexCharts to render an overview chart plus a chart per field.
+6) **Chatbot UI** is included on the map and detail pages and calls the Gemini API from the browser.
+
+### Color logic (map)
+The average score is mapped to fixed color buckets in `MainApplication/views.py`:
+- 90-100: green
+- 70-89.99: light green
+- 50-69.99: yellow
+- 20-49.99: orange
+- 0-19.99: red
+
+## Backend architecture
+
+### Apps
+- **`AI_Model`**: Django project config (settings, URLs, WSGI/ASGI).
+- **`AthenticationApplication`**: Custom user model and admin customization.
+- **`MainApplication`**: Core map + dashboard features and data models.
+
+### Models (`MainApplication/models.py`)
+- **City**: Province or island (name, population, type, is_capital).
+- **FieldType**: A score category (e.g., health, traffic).
+- **CityFieldScore**: A single score for a city + field.
+- **get_city_average_score**: Helper to compute the average score for a city.
+
+### Custom user model (`AthenticationApplication/models.py`)
+- Extends `AbstractBaseUser` and `PermissionsMixin`.
+- Adds profile image, phone number, national ID, Jalali birth date.
+- `AUTH_USER_MODEL` is set to `AthenticationApplication.User`.
+
+## Frontend architecture
+- **SVG map + labels**: `MainApplication/templates/MainApplication/iranmap.html` and `MainApplication/static/MainApplication/js/iranmap.js`.
+- **Charts**: `MainApplication/templates/MainApplication/city_detail.html` using ApexCharts via CDN.
+- **Chatbot UI**: `MainApplication/static/MainApplication/js/script_ChatBot.js` with styles in `MainApplication/static/MainApplication/css/style_ChatBot.css`.
+- **Note**: The chatbot calls Gemini from the browser and includes a hard-coded API key in `MainApplication/static/MainApplication/js/script_ChatBot.js`.
+
+## Data import and seed tools
+Custom management commands in `MainApplication/management/commands`:
+- `add_cities`: Inserts provinces and islands (used in initial setup).
+- `sample_maker`: Generates `sample.xlsx` and `sample.csv` with random metrics.
+- `json_converter`: Converts those sample files into JSON.
+- `sql_converter`: Loads a JSON file of scores into the database.
+
+SQLite migration notes are in `docs/migrations/README.md`.
+
+## Configuration
+- **Primary DB**: Postgres (see `AI_Model/settings.py`).
+- **SQLite option**: `AI_Model/settings_sqlite.py`.
+- **Env file**: `.env.local` is loaded if present.
+
+Expected Postgres env vars:
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+
+## Run locally (Postgres)
 
 ### 1) Install dependencies
-
-From the project root (where `manage.py` exists):
-
 ```bash
-pip install -r requirements.txt
+pip install -r requriment.txt
 ```
 
-### 2) Create and apply migrations
-
+### 2) Migrate
 ```bash
 python manage.py makemigrations
 python manage.py migrate
 ```
 
-### 3) Load initial data (cities)
-
+### 3) Seed cities
 ```bash
 python manage.py add_cities
 ```
 
-### 4) Admin credentials (default)
-
-* **username:** `admin`
-* **password:** `admin`
-
-> ⚠️ Change these in production.
+### 4) Create an admin user
+```bash
+python manage.py createsuperuser
+```
 
 ### 5) Run the server
-
 ```bash
 python manage.py runserver
 ```
 
 Open:
+- App: `http://127.0.0.1:8000/`
+- Admin: `http://127.0.0.1:8000/admin/`
 
-* App: `http://127.0.0.1:8000/`
-* Admin: `http://127.0.0.1:8000/admin/`
+## Run locally (SQLite)
+```bash
+DJANGO_SETTINGS_MODULE=AI_Model.settings_sqlite python manage.py migrate
+DJANGO_SETTINGS_MODULE=AI_Model.settings_sqlite python manage.py loaddata sqlite_seed.json
+DJANGO_SETTINGS_MODULE=AI_Model.settings_sqlite python manage.py runserver
+```
 
-Feel free to fork, improve, and submit pull requests.
-Clean code and smart ideas are always welcome 💡
+## Docker
+```bash
+docker compose up --build
+```
 
+- App: `http://127.0.0.1:4000/`
+- Postgres: `localhost:5432`
 
+## Project structure
+```text
+AI_Model/                     # Django project settings + ASGI/WSGI
+  settings.py
+  settings_sqlite.py
+  urls.py
+AthenticationApplication/      # Custom user model + admin
+  admin.py
+  models.py
+MainApplication/               # Core map + scoring app
+  management/commands/         # add_cities, sample_maker, json_converter, sql_converter
+  static/MainApplication/      # JS/CSS for map and chatbot
+  templates/MainApplication/   # iranmap.html, city_detail.html
+  models.py
+  urls.py
+  views.py
+Dockerfile
+README.md
+manage.py
+requriment.txt
+sqlite_seed.json               # Sample fixture export
+profile_image/                # Example profile image
+```
 
-
+## Notes
+- `docs/migrations/README.md` documents how to migrate SQLite data into Postgres.
+- `db.sqlite3` is present in the repo as a local dev snapshot.
 

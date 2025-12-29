@@ -1,49 +1,61 @@
-# Data Migration Guide (SQLite -> Postgres)
+# Data Migration Guide (SQLite to Postgres)
 
-Use this guide if you have existing data in `db.sqlite3` but your Postgres
-database is empty (for example, no cities, ranks, or parameters).
+Use this guide when you have existing data in `db.sqlite3` and want to move it
+into Postgres.
 
 ## Prerequisites
-- Postgres is running via docker-compose.
-- You have the Django dependencies installed in your venv.
+- Postgres is running via Docker Compose (`db` service).
+- Django dependencies are installed in your virtual environment.
 
-## Steps
-1) Start the Postgres service:
-   docker compose up -d db
+## Migration steps
+1) Start Postgres:
+```bash
+docker compose up -d db
+```
 
-2) Apply migrations to create schema in Postgres:
-   python manage.py migrate
+2) Apply migrations to Postgres:
+```bash
+python manage.py migrate
+```
+If you changed models and have not created migrations yet:
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
 
 3) Export data from SQLite:
-   python manage.py dumpdata \
-     --settings=AI_Model.settings_sqlite \
-     --natural-foreign --natural-primary \
-     --exclude contenttypes --exclude auth.permission \
-     --exclude admin.logentry --exclude sessions.session \
-     -o sqlite_seed.json
+```bash
+python manage.py dumpdata \
+  --settings=AI_Model.settings_sqlite \
+  --natural-foreign --natural-primary \
+  --exclude contenttypes --exclude auth.permission \
+  --exclude admin.logentry --exclude sessions.session \
+  -o sqlite_seed.json
+```
 
 4) Import into Postgres:
-   python manage.py loaddata sqlite_seed.json
+```bash
+python manage.py loaddata sqlite_seed.json
+```
 
-## Notes
-- If `loaddata` fails, read the error and remove the offending app from the dump
-  command (for example, add `--exclude some_app.Model`), then retry.
-- After a successful import, you can keep `sqlite_seed.json` as a backup.
+## Troubleshooting
+- If `loaddata` fails, remove the offending model from the dump with
+  `--exclude app_label.ModelName`, then retry.
+- Keep `sqlite_seed.json` as a backup after a successful import.
 
-
-
-### Options : make xlxs and csv sample files)
+## Optional data tools
+Generate sample XLSX and CSV files:
+```bash
 python manage.py sample_maker
+```
 
-
-
-### Options : convert xlxs and csv files to json)
-note : your file's name should be : "sample.xlxs" and "sample.csv"
+Convert `sample.xlsx` and `sample.csv` to JSON:
+```bash
 python manage.py json_converter
+```
 
-
-
-### Options : move json's data to postgresql)
-note : your file's name should be : "sample_from_csv.json" and "sample_from_excel.json"
+Load JSON scores into Postgres:
+```bash
 python manage.py sql_converter --file sample_from_csv.json
 python manage.py sql_converter --file sample_from_excel.json
+```
