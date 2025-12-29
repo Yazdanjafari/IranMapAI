@@ -1,7 +1,7 @@
 # IranMapAI
 
 ## Overview
-IranMapAI is a Django web app that visualizes Iranian provinces and islands on an SVG map, colors each region by its average score, and provides a city detail page with charts and a client-side chatbot. The backend stores cities, score fields, and per-city scores; the frontend renders the map and dashboards with static assets and CDN charts.
+IranMapAI is a Django web app that visualizes Iranian provinces and islands on an SVG map, colors each region by its average score, and provides a city detail page with charts and a client-side chatbot backed by the Persian Assistant API. The backend stores cities, score fields, and per-city scores; the frontend renders the map and dashboards with static assets and CDN charts.
 
 ## How the dashboard works
 
@@ -11,7 +11,7 @@ IranMapAI is a Django web app that visualizes Iranian provinces and islands on a
 3) **`iranmap.html`** receives `city_data` and `city_colors_by_slug`, then colors the SVG provinces via jQuery and links each province to its detail page.
 4) **`MainApplication.views.city_detail`** loads all field types and scores for the selected city and serializes them into JSON.
 5) **`city_detail.html`** uses ApexCharts to render an overview chart plus a chart per field.
-6) **Chatbot UI** is included on the map and detail pages and calls the Gemini API from the browser.
+6) **Chatbot UI** is included on the map and detail pages and calls the Persian Assistant API from the browser.
 
 ### Color logic (map)
 The average score is mapped to fixed color buckets in `MainApplication/views.py`:
@@ -43,7 +43,14 @@ The average score is mapped to fixed color buckets in `MainApplication/views.py`
 - **SVG map + labels**: `MainApplication/templates/MainApplication/iranmap.html` and `MainApplication/static/MainApplication/js/iranmap.js`.
 - **Charts**: `MainApplication/templates/MainApplication/city_detail.html` using ApexCharts via CDN.
 - **Chatbot UI**: `MainApplication/static/MainApplication/js/script_ChatBot.js` with styles in `MainApplication/static/MainApplication/css/style_ChatBot.css`.
-- **Note**: The chatbot calls Gemini from the browser and includes a hard-coded API key in `MainApplication/static/MainApplication/js/script_ChatBot.js`.
+
+## Chat assistant behavior
+- **Text queries**: `POST /api/v1/query/text` with `query`, `temperature`, and `max_tokens`.
+- **Voice queries**: `POST /api/v1/query/voice` with `audio` and `language=fa-IR` (chat shows an audio player and transcription header if provided).
+- **20-minute sessions**: Stored in `localStorage` per user; survives refresh, back, and city navigation until the session expires.
+- **Clear history**: The trash icon clears current session history in the browser.
+- **City context injection**: On city pages, the assistant receives a hidden summary of field scores and averages so it can answer city-specific questions without showing the data to the user.
+- **Recording timer**: Shows elapsed time while voice recording is active.
 
 ## Data import and seed tools
 Custom management commands in `MainApplication/management/commands`:
@@ -70,7 +77,7 @@ Expected Postgres env vars:
 
 ### 1) Install dependencies
 ```bash
-pip install -r requriments.txt
+pip install -r requriment.txt
 ```
 
 ### 2) Migrate
@@ -91,7 +98,7 @@ python manage.py createsuperuser
 
 ### 5) Run the server
 ```bash
-python manage.py runserver 4000
+python manage.py runserver
 ```
 
 Open:
@@ -140,4 +147,3 @@ profile_image/                # Example profile image
 ## Notes
 - `docs/migrations/README.md` documents how to migrate SQLite data into Postgres.
 - `db.sqlite3` is present in the repo as a local dev snapshot.
-
