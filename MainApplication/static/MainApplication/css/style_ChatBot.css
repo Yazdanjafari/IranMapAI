@@ -242,6 +242,134 @@ body.show-chatbot .chatbot-popup {
   animation: messageSlideIn 0.3s ease-out;
 }
 
+.chat-body .message .voice-message {
+  background: transparent;
+  padding: 0;
+  max-width: 100%;
+}
+
+.voice-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #f2f2ff;
+  border: 1px solid rgba(83, 80, 196, 0.15);
+  min-width: 240px;
+}
+
+.voice-card .bot-avatar {
+  height: 36px;
+  width: 36px;
+  padding: 6px;
+  fill: #fff;
+  flex-shrink: 0;
+  background: #5350c4;
+  border-radius: 50%;
+}
+
+.voice-controls {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.voice-play {
+  grid-row: 1 / span 2;
+  height: 40px;
+  width: 40px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  color: #5350c4;
+  box-shadow: 0 4px 10px rgba(83, 80, 196, 0.2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-play:hover {
+  transform: scale(1.05);
+}
+
+.voice-progress {
+  position: relative;
+  height: 6px;
+  width: 100%;
+  background: rgba(83, 80, 196, 0.15);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.voice-progress-bar {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: linear-gradient(90deg, #5350c4, #6c69d4);
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.voice-time {
+  font-size: 0.75rem;
+  color: #6c757d;
+  text-align: right;
+}
+
+.voice-bars {
+  grid-column: 2 / span 2;
+  display: flex;
+  gap: 4px;
+  height: 18px;
+  align-items: flex-end;
+}
+
+.voice-bars span {
+  width: 4px;
+  height: 6px;
+  border-radius: 6px;
+  background: rgba(83, 80, 196, 0.4);
+  transition: height 0.2s ease;
+}
+
+.voice-card.is-playing .voice-bars span {
+  animation: voicePulse 1s ease-in-out infinite;
+}
+
+.voice-card.is-playing .voice-bars span:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.voice-card.is-playing .voice-bars span:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.voice-card.is-playing .voice-bars span:nth-child(4) {
+  animation-delay: 0.3s;
+}
+
+.voice-card.is-playing .voice-bars span:nth-child(5) {
+  animation-delay: 0.4s;
+}
+
+@keyframes voicePulse {
+  0%, 100% {
+    height: 6px;
+  }
+  50% {
+    height: 16px;
+  }
+}
+
+.voice-card.is-visualized .voice-bars span {
+  animation: none;
+}
+
 @keyframes messageSlideIn {
   from {
     opacity: 0;
@@ -395,9 +523,8 @@ body.show-chatbot .chatbot-popup {
   justify-content: center;
 }
 
-.chat-body .voice-response {
-  width: 100%;
-  margin-top: 8px;
+.voice-audio {
+  display: none;
 }
 
 .chat-form .chat-controls button {

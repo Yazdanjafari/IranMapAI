@@ -59,6 +59,9 @@ const loadSession = () => {
     const session = JSON.parse(raw);
     const startedAt = session.startedAt || 0;
     if (!startedAt || Date.now() - startedAt > SESSION_DURATION_MS) {
+      if (session.id) {
+        localStorage.removeItem(`${HISTORY_STORAGE_PREFIX}${session.id}`);
+      }
       return { session: createSession(), isNew: true };
     }
     return { session, isNew: false };
@@ -90,7 +93,11 @@ const loadHistory = () => {
 };
 
 const persistHistory = () => {
-  localStorage.setItem(getHistoryKey(), JSON.stringify(chatHistory));
+  try {
+    localStorage.setItem(getHistoryKey(), JSON.stringify(chatHistory));
+  } catch (error) {
+    console.warn("Unable to cache chat history in localStorage.", error);
+  }
   updateSessionActivity();
 };
 
@@ -99,6 +106,8 @@ const ensureActiveSession = () => {
   if (startedAt && Date.now() - startedAt <= SESSION_DURATION_MS) {
     return;
   }
+  const previousHistoryKey = getHistoryKey();
+  localStorage.removeItem(previousHistoryKey);
   session = createSession();
   chatHistory = [];
   persistHistory();
@@ -175,7 +184,13 @@ const buildHistoryContextText = (currentQuery) => {
   }
   if (!recent.length) return "";
   return recent
-    .map((item) => `${item.role === "user" ? "کاربر" : "دستیار"}: ${item.text}`)
+    .map((item) => {
+      const label = item.role === "user" ? "کاربر" : "دستیار";
+      if (item.type === "audio") {
+        return `${label}: پیام صوتی`;
+      }
+      return `${label}: ${item.text}`;
+    })
     .join("\n");
 };
 
@@ -202,15 +217,23 @@ const buildAugmentedQuery = (query) => {
   return `<<<\n${contextParts.join("\n\n")}\n>>>\n\nپرسش کاربر: ${query}`;
 };
 
-const persistMessage = (role, text) => {
-  if (!text) return;
+const persistMessage = (role, text, options = {}) => {
+  if (!text && options.type !== "audio") return;
   ensureActiveSession();
-  chatHistory.push({
+  const entry = {
     role,
-    text,
+    type: options.type || "text",
+    text: text || "",
     timestamp: Date.now(),
     citySlug: getActiveCitySlug(),
-  });
+  };
+  if (options.audioData) {
+    entry.audioData = options.audioData;
+  }
+  if (typeof options.duration === "number") {
+    entry.duration = options.duration;
+  }
+  chatHistory.push(entry);
   persistHistory();
 };
 
@@ -228,36 +251,13 @@ const appendMessage = (text, messageClass, options = {}) => {
   }, 100);
 };
 
-const renderStoredHistory = () => {
-  if (!chatBody) return;
-  if (!chatHistory.length) {
-    chatBody.innerHTML = initialChatBodyMarkup;
-    return;
-  }
-  chatBody.innerHTML = "";
-  chatHistory.forEach((item) => {
-    const messageClass = item.role === "user" ? "user-message" : "bot-message";
-    appendMessage(item.text, messageClass, { persist: false });
-  });
-};
-
-updateCityContextFromPage();
-if (pageCitySlug) {
-  session.activeCitySlug = pageCitySlug;
-  persistSession(session);
-}
-if (isNewSession) {
-  chatHistory = [];
-  persistHistory();
-}
-renderStoredHistory();
-
 const clearChatHistory = () => {
   chatHistory = [];
   localStorage.removeItem(getHistoryKey());
   if (chatBody) {
     chatBody.innerHTML = initialChatBodyMarkup;
   }
+  stopAudioPlayback();
   updateSessionActivity();
 };
 
@@ -515,6 +515,7 @@ chatbotToggler.addEventListener("click", () => {
 // Voice query functionality
 const VOICE_API_URL = `${CHAT_API_BASE}/api/v1/query/voice`;
 const VOICE_LANGUAGE = "fa-IR";
+const MAX_AUDIO_CACHE_BYTES = 1500000;
 let mediaRecorder = null;
 let recordedChunks = [];
 let isRecording = false;
@@ -523,45 +524,168 @@ let currentAudio = null;
 let recordingTimerInterval = null;
 let recordingStartTime = null;
 
-const appendAudioMessage = (audioBlob) => {
+const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(new Error("Unable to read audio blob."));
+  reader.readAsDataURL(blob);
+});
+
+const cacheVoiceResponse = async (audioBlob) => {
+  if (!audioBlob || audioBlob.size > MAX_AUDIO_CACHE_BYTES) {
+    return null;
+  }
+  try {
+    const dataUrl = await blobToDataUrl(audioBlob);
+    if (typeof dataUrl === "string") {
+      persistMessage("bot", "", { type: "audio", audioData: dataUrl });
+      return dataUrl;
+    }
+  } catch (error) {
+    console.warn("Unable to cache voice response.", error);
+  }
+  return null;
+};
+
+const appendAudioMessage = (options) => {
   if (!chatBody) return;
-  const audioUrl = URL.createObjectURL(audioBlob);
+  const audioBlob = options && options.blob ? options.blob : null;
+  const audioDataUrl = options && options.dataUrl ? options.dataUrl : null;
+  const autoPlay = options && options.autoPlay !== undefined ? options.autoPlay : true;
+  const shouldPersist = options && options.persist === true;
+  const audioSrc = audioDataUrl || (audioBlob ? URL.createObjectURL(audioBlob) : null);
+  if (!audioSrc) {
+    return;
+  }
   const message = createMessageElement(
-    `<div class="message-text">پاسخ صوتی آماده است.</div>
-     <audio class="voice-response" controls></audio>`,
+    `<svg 
+        class="bot-avatar"
+        xmlns="http://www.w3.org/2000/svg"
+        width="50"
+        height="50"
+        viewBox="0 0 1024 1024"
+      >
+        <path
+          d="M738.3 287.6H285.7c-59 0-106.8 47.8-106.8 106.8v303.1c0 59 47.8 106.8 106.8 106.8h81.5v111.1c0 .7.8 1.1 1.4.7l166.9-110.6 41.8-.8h117.4l43.6-.4c59 0 106.8-47.8 106.8-106.8V394.5c0-59-47.8-106.9-106.8-106.9zM351.7 448.2c0-29.5 23.9-53.5 53.5-53.5s53.5 23.9 53.5 53.5-23.9 53.5-53.5 53.5-53.5-23.9-53.5-53.5zm157.9 267.1c-67.8 0-123.8-47.5-132.3-109h264.6c-8.6 61.5-64.5 109-132.3 109zm110-213.7c-29.5 0-53.5-23.9-53.5-53.5s23.9-53.5 53.5-53.5 53.5 23.9 53.5 53.5-23.9 53.5-53.5 53.5zM867.2 644.5V453.1h26.5c19.4 0 35.1 15.7 35.1 35.1v121.1c0 19.4-15.7 35.1-35.1 35.1h-26.5zM95.2 609.4V488.2c0-19.4 15.7-35.1 35.1-35.1h26.5v191.3h-26.5c-19.4 0-35.1-15.7-35.1-35.1zM561.5 149.6c0 23.4-15.6 43.3-36.9 49.7v44.9h-30v-44.9c-21.4-6.5-36.9-26.3-36.9-49.7 0-28.6 23.3-51.9 51.9-51.9s51.9 23.3 51.9 51.9z"
+        ></path>
+      </svg>
+      <div class="message-text voice-message">
+        <div class="voice-card">
+          <button type="button" class="voice-play" aria-label="پخش صدا">
+            <span class="material-symbols-rounded">play_arrow</span>
+          </button>
+          <div class="voice-controls">
+            <div class="voice-progress">
+              <div class="voice-progress-bar"></div>
+            </div>
+            <div class="voice-time">00:00 / 00:00</div>
+            <div class="voice-bars" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+        <audio class="voice-audio" preload="metadata"></audio>
+      </div>`,
     "bot-message"
   );
-  const audioEl = message.querySelector("audio");
-  audioEl.src = audioUrl;
-  audioEl.onended = () => {
-    URL.revokeObjectURL(audioUrl);
-    if (currentAudio === audioEl) {
+  const audioEl = message.querySelector(".voice-audio");
+  const voiceCard = message.querySelector(".voice-card");
+  const playButton = message.querySelector(".voice-play");
+  const playIcon = playButton.querySelector("span");
+  const progressBar = message.querySelector(".voice-progress-bar");
+  const timeLabel = message.querySelector(".voice-time");
+  const bars = Array.from(message.querySelectorAll(".voice-bars span"));
+
+  audioEl.src = audioSrc;
+  audioEl.onloadedmetadata = () => {
+    timeLabel.textContent = `00:00 / ${formatAudioTime(audioEl.duration)}`;
+  };
+  audioEl.ontimeupdate = () => {
+    if (!audioEl.duration) return;
+    const progress = Math.min(100, (audioEl.currentTime / audioEl.duration) * 100);
+    progressBar.style.width = `${progress}%`;
+    timeLabel.textContent = `${formatAudioTime(audioEl.currentTime)} / ${formatAudioTime(audioEl.duration)}`;
+  };
+  audioEl.onplay = () => {
+    isPlayingAudio = true;
+    voiceCard.classList.add("is-playing");
+    playIcon.textContent = "pause";
+    currentAudio = {
+      audio: audioEl,
+      card: voiceCard,
+      buttonIcon: playIcon,
+      progressBar,
+      time: timeLabel,
+      bars,
+      visualizer: null,
+    };
+    startVoiceVisualizer(currentAudio);
+    setSpeechButtonState("playing");
+  };
+  audioEl.onpause = () => {
+    voiceCard.classList.remove("is-playing");
+    playIcon.textContent = "play_arrow";
+    isPlayingAudio = false;
+    if (currentAudio && currentAudio.audio === audioEl) {
+      stopVoiceVisualizer(currentAudio);
       currentAudio = null;
-      isPlayingAudio = false;
       setSpeechButtonState("idle");
     }
+  };
+  audioEl.onended = () => {
+    voiceCard.classList.remove("is-playing");
+    playIcon.textContent = "play_arrow";
+    isPlayingAudio = false;
+    if (currentAudio && currentAudio.audio === audioEl) {
+      stopVoiceVisualizer(currentAudio);
+      currentAudio = null;
+    }
+    setSpeechButtonState("idle");
   };
   audioEl.onerror = () => {
-    URL.revokeObjectURL(audioUrl);
-    if (currentAudio === audioEl) {
+    voiceCard.classList.remove("is-playing");
+    playIcon.textContent = "play_arrow";
+    isPlayingAudio = false;
+    if (currentAudio && currentAudio.audio === audioEl) {
+      stopVoiceVisualizer(currentAudio);
       currentAudio = null;
-      isPlayingAudio = false;
-      setSpeechButtonState("idle");
     }
+    setSpeechButtonState("idle");
   };
+
+  playButton.addEventListener("click", () => {
+    if (currentAudio && currentAudio.audio !== audioEl) {
+      currentAudio.audio.pause();
+    }
+    if (audioEl.paused) {
+      audioEl.play().catch(() => {
+        setSpeechButtonState("idle");
+      });
+    } else {
+      audioEl.pause();
+    }
+  });
+
   chatBody.appendChild(message);
-  persistMessage("bot", "پاسخ صوتی آماده است.");
+  if (shouldPersist && audioDataUrl) {
+    persistMessage("bot", "", { type: "audio", audioData: audioDataUrl });
+  }
   setTimeout(() => {
     chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: "smooth" });
   }, 100);
 
-  currentAudio = audioEl;
-  isPlayingAudio = true;
-  setSpeechButtonState("playing");
-  audioEl.play().catch(() => {
-    isPlayingAudio = false;
-    setSpeechButtonState("idle");
-  });
+  if (currentAudio && currentAudio.audio !== audioEl) {
+    currentAudio.audio.pause();
+  }
+  if (autoPlay) {
+    audioEl.play().catch(() => {
+      setSpeechButtonState("idle");
+    });
+  }
 };
 
 const setRecordingTimerVisible = (isVisible) => {
@@ -578,6 +702,94 @@ const formatElapsedTime = (startTime) => {
   const minutes = Math.floor(elapsed / 60000);
   const seconds = Math.floor((elapsed % 60000) / 1000);
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const formatAudioTime = (seconds) => {
+  if (!Number.isFinite(seconds)) {
+    return "00:00";
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+};
+
+const startVoiceVisualizer = (holder) => {
+  if (!holder || !holder.bars || holder.bars.length === 0) {
+    return;
+  }
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) {
+    return;
+  }
+  const audioEl = holder.audio;
+  if (!audioEl.__visualizer) {
+    const context = new AudioContext();
+    const source = context.createMediaElementSource(audioEl);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 64;
+    source.connect(analyser);
+    analyser.connect(context.destination);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const step = Math.max(1, Math.floor(dataArray.length / holder.bars.length));
+    audioEl.__visualizer = {
+      context,
+      source,
+      analyser,
+      dataArray,
+      step,
+      rafId: null,
+    };
+  }
+
+  holder.visualizer = audioEl.__visualizer;
+  if (holder.visualizer.context && holder.visualizer.context.state === "suspended") {
+    holder.visualizer.context.resume();
+  }
+
+  holder.card.classList.add("is-visualized");
+  holder.bars.forEach((bar) => {
+    bar.style.animation = "none";
+  });
+
+  const update = () => {
+    if (!holder.visualizer) return;
+    const { analyser, dataArray, step } = holder.visualizer;
+    analyser.getByteFrequencyData(dataArray);
+    holder.bars.forEach((bar, index) => {
+      const start = index * step;
+      const end = Math.min(dataArray.length, start + step);
+      let sum = 0;
+      for (let i = start; i < end; i += 1) {
+        sum += dataArray[i];
+      }
+      const avg = sum / Math.max(1, end - start);
+      const height = 6 + (avg / 255) * 14;
+      bar.style.height = `${height}px`;
+    });
+    holder.visualizer.rafId = requestAnimationFrame(update);
+  };
+
+  if (holder.visualizer.rafId) {
+    cancelAnimationFrame(holder.visualizer.rafId);
+  }
+  update();
+};
+
+const stopVoiceVisualizer = (holder) => {
+  if (!holder || !holder.visualizer) return;
+  const { rafId, context } = holder.visualizer;
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+  }
+  if (context && context.state === "running") {
+    context.suspend();
+  }
+  holder.visualizer.rafId = null;
+  holder.card.classList.remove("is-visualized");
+  holder.bars.forEach((bar) => {
+    bar.style.height = "";
+    bar.style.animation = "";
+  });
 };
 
 const setSpeechButtonState = (state) => {
@@ -603,13 +815,46 @@ const setSpeechButtonState = (state) => {
 
 const stopAudioPlayback = () => {
   if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
+    stopVoiceVisualizer(currentAudio);
+    currentAudio.audio.pause();
+    currentAudio.audio.currentTime = 0;
+    currentAudio.card.classList.remove("is-playing");
+    currentAudio.buttonIcon.textContent = "play_arrow";
+    currentAudio.progressBar.style.width = "0%";
+    currentAudio.time.textContent = `00:00 / ${formatAudioTime(currentAudio.audio.duration)}`;
     currentAudio = null;
   }
   isPlayingAudio = false;
   setSpeechButtonState("idle");
 };
+
+const renderStoredHistory = () => {
+  if (!chatBody) return;
+  if (!chatHistory.length) {
+    chatBody.innerHTML = initialChatBodyMarkup;
+    return;
+  }
+  chatBody.innerHTML = "";
+  chatHistory.forEach((item) => {
+    const messageClass = item.role === "user" ? "user-message" : "bot-message";
+    if (item.type === "audio" && item.audioData) {
+      appendAudioMessage({ dataUrl: item.audioData, autoPlay: false, persist: false });
+      return;
+    }
+    appendMessage(item.text, messageClass, { persist: false });
+  });
+};
+
+updateCityContextFromPage();
+if (pageCitySlug) {
+  session.activeCitySlug = pageCitySlug;
+  persistSession(session);
+}
+if (isNewSession) {
+  chatHistory = [];
+  persistHistory();
+}
+renderStoredHistory();
 
 const startRecordingTimer = () => {
   if (!recordingTimer) return;
@@ -670,7 +915,8 @@ const sendVoiceQuery = async (audioBlob, filename) => {
     }
 
     const audioResponse = await response.blob();
-    appendAudioMessage(audioResponse);
+    appendAudioMessage({ blob: audioResponse, autoPlay: true, persist: false });
+    cacheVoiceResponse(audioResponse);
   } catch (error) {
     appendMessage("ارتباط با سرویس صوتی ناموفق بود.", "bot-message");
     setSpeechButtonState("idle");
